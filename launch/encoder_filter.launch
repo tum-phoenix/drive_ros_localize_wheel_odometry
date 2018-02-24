@@ -1,0 +1,25 @@
+<launch>
+
+    <arg name="input_topic" default="/from_mav/odometer_delta"/>
+    <arg name="output_topic" default="/from_mav/odom"/>
+
+    <arg name="encoder_ct" default="1"/>
+
+
+    <!-- define nice value of process (lower means higher priority) [-20;19] -->
+    <!-- more infos: https://en.wikipedia.org/wiki/Nice_(Unix) -->
+    <arg name="nice" default="nice -n -5"/>
+
+    <!-- forward output to [screen|log] -->
+    <arg name="output" default="screen"/>
+
+
+    <node name="encoder_filter" pkg="drive_ros_encoder_filter"
+          type="filter_node" output="$(arg output)" launch-prefix="$(arg nice)">
+        <remap from="~/enc_in" to="$(arg input_topic)"/>
+        <remap from="~/enc_out" to="$(arg output_topic)"/>
+        <param name="encoder_ct" type="int" value="$(arg encoder_ct)" />
+    </node>
+
+
+</launch>
