@@ -9,9 +9,6 @@
     <!-- number of encoders being used -->
     <arg name="encoder_ct" default="1"/>
 
-    <!-- should be use relative instead of absolute position -->
-    <arg name="use_rel" default="true" />
-
     <!-- define nice value of process (lower means higher priority) [-20;19] -->
     <!-- more infos: https://en.wikipedia.org/wiki/Nice_(Unix) -->
     <arg name="nice" default="nice -n -5"/>
@@ -20,12 +17,11 @@
     <arg name="output" default="screen"/>
 
 
-    <node name="encoder_filter" pkg="drive_ros_encoder_filter"
-          type="filter_node" output="$(arg output)" launch-prefix="$(arg nice)">
+    <node name="encoder_odometry" pkg="drive_ros_encoder_odometry"
+          type="encoder_odometry" output="$(arg output)" launch-prefix="$(arg nice)">
         <remap from="~/enc_in" to="$(arg input_topic)"/>
         <remap from="~/enc_out" to="$(arg output_topic)"/>
         <param name="encoder_ct" type="int" value="$(arg encoder_ct)" />
-        <param name="use_rel" type="bool" value="$(arg use_rel)" />
     </node>
 
 

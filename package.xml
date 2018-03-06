@@ -1,8 +1,8 @@
 <?xml version="1.0"?>
 <package format="2">
-  <name>drive_ros_encoder_filter</name>
+  <name>drive_ros_encoder_odometry</name>
   <version>0.0.0</version>
-  <description>The drive_ros_encoder_filter package</description>
+  <description>The encoder_odometry package</description>
 
   <!-- One maintainer tag required, multiple allowed, one person per tag -->
   <!-- Example:  -->
