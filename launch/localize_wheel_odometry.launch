@@ -27,8 +27,8 @@
     <arg name="output" default="screen"/>
 
 
-    <node name="encoder_odometry" pkg="drive_ros_encoder_odometry"
-          type="encoder_odometry" output="$(arg output)" launch-prefix="$(arg nice)">
+    <node name="localize_wheel_odometry" pkg="drive_ros_encoder_odometry"
+          type="node" output="$(arg output)" launch-prefix="$(arg nice)">
         <remap from="~/enc_in" to="$(arg input_topic)"/>
         <remap from="~/odom_out" to="$(arg output_topic)"/>
         <param name="encoder_ct" type="int" value="$(arg encoder_ct)" />

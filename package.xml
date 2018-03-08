@@ -1,8 +1,8 @@
 <?xml version="1.0"?>
 <package format="2">
-  <name>drive_ros_encoder_odometry</name>
+  <name>drive_ros_localize_wheel_odometry</name>
   <version>0.0.0</version>
-  <description>The encoder_odometry package</description>
+  <description>These package provides a localizer using wheel odometry.</description>
 
   <!-- One maintainer tag required, multiple allowed, one person per tag -->
   <!-- Example:  -->

@@ -3,7 +3,7 @@
 #include "nav_msgs/Odometry.h"
 #include "tf/tf.h"
 
-#include "drive_ros_encoder_odometry/cov_elements.h"
+#include "drive_ros_localize_wheel_odometry/cov_elements.h"
 
 
 int encoder_ct = 0;           // number of encoder
@@ -107,7 +107,7 @@ void encoderCallback(const drive_ros_msgs::VehicleEncoder::ConstPtr& msg)
 
 int main(int argc, char **argv)
 {
-  ros::init(argc, argv, "encoder_odometry");
+  ros::init(argc, argv, "localize_wheel_odometry");
   ros::NodeHandle nh;
   ros::NodeHandle pnh("~");
 
