@@ -4,10 +4,20 @@
     <arg name="input_topic" default="/from_mav/odometer_delta"/>
 
     <!-- output topic name -->
-    <arg name="output_topic" default="/from_mav/odom"/>
+    <arg name="output_topic" default="/from_mav/wheel_odom"/>
 
-    <!-- number of encoders being used -->
+    <!--
+        Number of encoders being used. Currently supported:
+        * 1 central motor encoder (onedimensional odometry output)
+        * 4 wheel encoder (twodimensional odometry output)
+    -->
     <arg name="encoder_ct" default="1"/>
+
+    <!-- static frame id (moving frame id will be used from incoming message frame) -->
+    <arg name="static_frame_id" default="odometry" />
+
+    <!-- track width (distance between wheels on an axis) -->
+    <arg name="track_width" default="0.22" />
 
     <!-- define nice value of process (lower means higher priority) [-20;19] -->
     <!-- more infos: https://en.wikipedia.org/wiki/Nice_(Unix) -->
@@ -20,8 +30,10 @@
     <node name="encoder_odometry" pkg="drive_ros_encoder_odometry"
           type="encoder_odometry" output="$(arg output)" launch-prefix="$(arg nice)">
         <remap from="~/enc_in" to="$(arg input_topic)"/>
-        <remap from="~/enc_out" to="$(arg output_topic)"/>
+        <remap from="~/odom_out" to="$(arg output_topic)"/>
         <param name="encoder_ct" type="int" value="$(arg encoder_ct)" />
+        <param name="static_frame_id" type="str" value="$(arg static_frame_id)" />
+        <param name="track_width" type="double" value="$(arg track_width)" />
     </node>
 
 
