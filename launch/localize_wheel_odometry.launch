@@ -16,6 +16,9 @@
     <!-- static frame id (moving frame id will be used from incoming message frame) -->
     <arg name="static_frame_id" default="odometry" />
 
+    <!-- addionallty to the odom message, also broadcast tf? -->
+    <arg name="broadcast_tf" default="true" />
+
     <!-- track width (distance between wheels on an axis) -->
     <arg name="track_width" default="0.22" />
 
@@ -27,13 +30,14 @@
     <arg name="output" default="screen"/>
 
 
-    <node name="localize_wheel_odometry" pkg="drive_ros_encoder_odometry"
+    <node name="localize_wheel_odometry" pkg="drive_ros_localize_wheel_odometry"
           type="node" output="$(arg output)" launch-prefix="$(arg nice)">
         <remap from="~/enc_in" to="$(arg input_topic)"/>
         <remap from="~/odom_out" to="$(arg output_topic)"/>
         <param name="encoder_ct" type="int" value="$(arg encoder_ct)" />
         <param name="static_frame_id" type="str" value="$(arg static_frame_id)" />
         <param name="track_width" type="double" value="$(arg track_width)" />
+        <param name="broadcast_tf" type="boolean" value="$(arg broadcast_tf)" />
     </node>
 
 
