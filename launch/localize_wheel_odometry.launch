@@ -1,26 +1,19 @@
 <launch>
 
+    <!-- vehicle name e.g. cc2017_car -->
+    <arg name="vehicle" default="cc2017_car"/>
+
     <!-- input topic name -->
     <arg name="input_topic" default="/from_mav/odometer_delta"/>
 
     <!-- output topic name -->
     <arg name="output_topic" default="/from_mav/wheel_odom"/>
 
-    <!--
-        Number of encoders being used. Currently supported:
-        * 1 central motor encoder (onedimensional odometry output)
-        * 4 wheel encoder (twodimensional odometry output)
-    -->
-    <arg name="encoder_ct" default="1"/>
-
     <!-- static frame id (moving frame id will be used from incoming message frame) -->
     <arg name="static_frame_id" default="odometry" />
 
     <!-- addionallty to the odom message, also broadcast tf? -->
     <arg name="broadcast_tf" default="true" />
-
-    <!-- track width (distance between wheels on an axis) -->
-    <arg name="track_width" default="0.22" />
 
     <!--
         use sensor time to publish tf and odometry
@@ -29,9 +22,16 @@
     -->
     <arg name="use_sensor_time_for_pub" default="false" />
 
-    <!-- moving average filter for theta calculation. Length of moving average -->
+    <!--
+        moving average filter for theta calculation.
+        Length of moving average:
+            * high: less noise, worse dynamics
+            * low: high noise, better dynamics
+    -->
     <arg name="theta_filter_length" default="100" />
 
+    <!-- vehicle configuration file -->
+    <arg name="vehicle_config" default="$(find drive_ros_localize_wheel_odometry)/config/$(arg vehicle).yaml" />
 
     <!-- define nice value of process (lower means higher priority) [-20;19] -->
     <!-- more infos: https://en.wikipedia.org/wiki/Nice_(Unix) -->
@@ -45,12 +45,11 @@
           type="node" output="$(arg output)" launch-prefix="$(arg nice)">
         <remap from="~/enc_in" to="$(arg input_topic)"/>
         <remap from="~/odom_out" to="$(arg output_topic)"/>
-        <param name="encoder_ct" type="int" value="$(arg encoder_ct)" />
         <param name="static_frame_id" type="str" value="$(arg static_frame_id)" />
-        <param name="track_width" type="double" value="$(arg track_width)" />
         <param name="broadcast_tf" type="boolean" value="$(arg broadcast_tf)" />
         <param name="use_sensor_time_for_pub" type="boolean" value="$(arg use_sensor_time_for_pub)" />
         <param name="theta_filter_length" type="int" value="$(arg theta_filter_length)" />
+        <rosparam command="load" file="$(arg vehicle_config)"/>
     </node>
 
 
