@@ -22,6 +22,17 @@
     <!-- track width (distance between wheels on an axis) -->
     <arg name="track_width" default="0.22" />
 
+    <!--
+        use sensor time to publish tf and odometry
+        advantage: published time is similar to sensor data time
+        disadvantage: can cause problems with time jumps, when replaying bags in loops
+    -->
+    <arg name="use_sensor_time_for_pub" default="false" />
+
+    <!-- moving average filter for theta calculation. Length of moving average -->
+    <arg name="theta_filter_length" default="100" />
+
+
     <!-- define nice value of process (lower means higher priority) [-20;19] -->
     <!-- more infos: https://en.wikipedia.org/wiki/Nice_(Unix) -->
     <arg name="nice" default="nice -n -5"/>
@@ -38,6 +49,8 @@
         <param name="static_frame_id" type="str" value="$(arg static_frame_id)" />
         <param name="track_width" type="double" value="$(arg track_width)" />
         <param name="broadcast_tf" type="boolean" value="$(arg broadcast_tf)" />
+        <param name="use_sensor_time_for_pub" type="boolean" value="$(arg use_sensor_time_for_pub)" />
+        <param name="theta_filter_length" type="int" value="$(arg theta_filter_length)" />
     </node>
 
 

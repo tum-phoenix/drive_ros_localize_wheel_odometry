@@ -3,21 +3,34 @@
 #include "nav_msgs/Odometry.h"
 #include "tf/tf.h"
 #include "tf/transform_broadcaster.h"
+#include "eigen3/Eigen/Dense"
 
 #include "drive_ros_localize_wheel_odometry/cov_elements.h"
+#include "drive_ros_localize_wheel_odometry/moving_average.h"
+
+// matrix indices
+static constexpr size_t X     = 0;
+static constexpr size_t Y     = 1;
+static constexpr size_t THETA = 2;
+
+static constexpr size_t DELTA_R = 0;
+static constexpr size_t DELTA_L = 1;
 
 
 int encoder_ct = 0;                      // number of encoder
-float theta = 0;                         // heading
+double theta = 0;                        // heading
 double track_width;                      // distance between wheels on an axis
 bool broadcast_tf;                       // whether to broadcast tf
 bool first_msg = true;                   // is first message ?
+bool use_sensor_time_for_pub = true;     // use sensor time or not
 
 ros::Publisher odom;                     // publisher
 nav_msgs::Odometry odom_out;             // published message
 tf::TransformBroadcaster* br;            // broadcast transform
 
 drive_ros_msgs::VehicleEncoder msg_old;  // old vehicle encoder message
+Eigen::Matrix<double, 3, 3> Sigma_p;     // covariance matrix of previous step
+MovingAverage* theta_filter;             // moving average filter for theta
 
 
 void encoderCallback(const drive_ros_msgs::VehicleEncoder::ConstPtr& msg)
@@ -47,31 +60,35 @@ void encoderCallback(const drive_ros_msgs::VehicleEncoder::ConstPtr& msg)
 
 
   // set header
-  odom_out.header.stamp = msg->header.stamp;
+  ros::Time out_time;
+  if(use_sensor_time_for_pub){
+    out_time = msg->header.stamp;
+  }else{
+    out_time = ros::Time::now();
+  }
+
+  odom_out.header.stamp = out_time;
   odom_out.child_frame_id = msg->header.frame_id;
 
 
   // caculate velocity
-  float vel(0), vel_var(0), delta_s(0), delta_s_var(0);
+  double vel(0), vel_var(0), delta_s(0);
 
 
   // calculate mean
   for(int i=0; i<encoder_ct; i++){
 
-    vel     += msg->encoder[i].vel;
+    vel += msg->encoder[i].vel;
     vel_var += msg->encoder[i].vel_var;
-
-    delta_s     += msg->encoder[i].pos_abs - msg_old.encoder[i].pos_abs; // use absolute position to avoid errors from message drops
-    delta_s_var += msg->encoder[i].pos_rel_var;
+    delta_s += msg->encoder[i].pos_abs - msg_old.encoder[i].pos_abs; // use absolute position to avoid errors from message drops
 
     // save old message
     msg_old.encoder[i].pos_abs = msg->encoder[i].pos_abs;
   }
 
-  vel         = vel/(float)encoder_ct;
-  vel_var     = vel_var/(float)encoder_ct;
-  delta_s     = delta_s/(float)encoder_ct;
-  delta_s_var = delta_s_var/(float)encoder_ct;
+  vel = vel/(double)encoder_ct;
+  delta_s = delta_s/(double)encoder_ct;
+
 
 
   switch (encoder_ct) {
@@ -81,9 +98,9 @@ void encoderCallback(const drive_ros_msgs::VehicleEncoder::ConstPtr& msg)
     {
       // save position and velocity in odom_out
       odom_out.pose.pose.position.x += delta_s;
-      odom_out.pose.covariance[CovElem::lin_ang::linX_linX] = delta_s_var;
+      odom_out.pose.covariance[CovElem::lin_ang::linX_linX] = msg->encoder[msg->MOTOR].pos_rel_var;
       odom_out.twist.twist.linear.x = vel;
-      odom_out.twist.covariance[CovElem::lin_ang::linX_linX] = vel_var;
+      odom_out.twist.covariance[CovElem::lin_ang::linX_linX] = msg->encoder[msg->MOTOR].vel_var;
       break;
     }
 
@@ -99,51 +116,78 @@ void encoderCallback(const drive_ros_msgs::VehicleEncoder::ConstPtr& msg)
                    msg->encoder[msg->REAR_WHEEL_LEFT].pos_rel ) / track_width;
 
 
-      float dtheta = (dtheta_f + dtheta_r) / 2.0;
+      // use mean of front and rear delta theta
+      theta_filter->add((dtheta_f + dtheta_r) / 2.0);
+      double dtheta = theta_filter->getCurrentAverage();
 
+      // some intermediate variables
+      double th = theta + dtheta/2;
+      double costh = cos(static_cast<float>(th));
+      double sinth = sin(static_cast<float>(th));
 
       // save position and velocity in odom_out
-      odom_out.pose.pose.position.x += delta_s * cos(theta + dtheta/2);
-      odom_out.pose.covariance[CovElem::lin_ang::linX_linX] = delta_s_var * cos(theta + dtheta/2);
-      odom_out.pose.pose.position.y += delta_s * sin(theta + dtheta/2);
-      odom_out.pose.covariance[CovElem::lin_ang::linY_linY] = delta_s_var * sin(theta + dtheta/2);
-      odom_out.twist.twist.linear.x = vel * cos(theta + dtheta/2);
-      odom_out.twist.covariance[CovElem::lin_ang::linX_linX] = vel_var * cos(theta + dtheta/2);
-      odom_out.twist.twist.linear.y = vel * sin(theta + dtheta/2);
-      odom_out.twist.covariance[CovElem::lin_ang::linY_linY] = vel_var * sin(theta + dtheta/2);
+      odom_out.pose.pose.position.x += delta_s * costh;
+      odom_out.pose.pose.position.y += delta_s * sinth;
+
+      // create jacobians
+      Eigen::Matrix<double, 3, 3> Jacobian_p;
+      Jacobian_p.setIdentity();
+      Jacobian_p(X, THETA) = - delta_s * sinth;
+      Jacobian_p(Y, THETA) =   delta_s * costh;
+
+      Eigen::Matrix<double, 3, 2> Jacobian_delta;
+      Jacobian_delta(X, DELTA_R) = costh/2 - (delta_s * sinth)/(2 * track_width);
+      Jacobian_delta(X, DELTA_L) = costh/2 + (delta_s * sinth)/(2 * track_width);
+      Jacobian_delta(Y, DELTA_R) = sinth/2 + (delta_s * costh)/(2 * track_width);
+      Jacobian_delta(Y, DELTA_L) = sinth/2 - (delta_s * costh)/(2 * track_width);
+      Jacobian_delta(THETA, DELTA_R) = 1/track_width;
+      Jacobian_delta(THETA, DELTA_L) = 1/track_width;
+
+      Eigen::Matrix<double, 2, 2> Sigma_delta;
+      Sigma_delta.setZero();
+      Sigma_delta(DELTA_R, DELTA_R) = ( msg->encoder[msg->FRONT_WHEEL_RIGHT].pos_abs_var +
+                                        msg->encoder[msg->REAR_WHEEL_RIGHT].pos_abs_var )/2;
+      Sigma_delta(DELTA_L, DELTA_L) = ( msg->encoder[msg->FRONT_WHEEL_LEFT].pos_abs_var +
+                                        msg->encoder[msg->REAR_WHEEL_LEFT].pos_abs_var )/2;
+//      Sigma_delta(DELTA_R, DELTA_R) = 0.0000001;
+//      Sigma_delta(DELTA_L, DELTA_L) = 0.0000001;
+
+
+      Sigma_p = Jacobian_p     * Sigma_p     * Jacobian_p.transpose()       // covariances from previous state
+              + Jacobian_delta * Sigma_delta * Jacobian_delta.transpose();  // covariances from new delta
+
+
+      odom_out.pose.covariance[CovElem::lin_ang::linX_linX] = Sigma_p(X    , X    );
+      odom_out.pose.covariance[CovElem::lin_ang::linX_linY] = Sigma_p(X    , Y    );
+      odom_out.pose.covariance[CovElem::lin_ang::linX_angZ] = Sigma_p(X    , THETA);
+      odom_out.pose.covariance[CovElem::lin_ang::linY_linX] = Sigma_p(Y    , X    );
+      odom_out.pose.covariance[CovElem::lin_ang::linY_linY] = Sigma_p(Y    , Y    );
+      odom_out.pose.covariance[CovElem::lin_ang::linY_angZ] = Sigma_p(Y    , THETA);
+      odom_out.pose.covariance[CovElem::lin_ang::angZ_linX] = Sigma_p(THETA, X    );
+      odom_out.pose.covariance[CovElem::lin_ang::angZ_linY] = Sigma_p(THETA, Y    );
+      odom_out.pose.covariance[CovElem::lin_ang::angZ_angZ] = Sigma_p(THETA, THETA);
+
+
+      // this is a very straight forward velocity concept
+      odom_out.twist.twist.linear.x = vel * costh;
+      odom_out.twist.twist.linear.y = vel * sinth;
+
+      odom_out.twist.covariance[CovElem::lin_ang::linX_linX] = 0;
+      odom_out.twist.covariance[CovElem::lin_ang::linY_linY] = 0;
+      odom_out.twist.covariance[CovElem::lin_ang::angZ_angZ] = 0;
+
+
 
       // integrate theta
       theta += dtheta;
 
       // save relative theta in odom_out
       tf::Quaternion q;
-      q.setRPY(float(0), float(0), theta);
+      q.setRPY(double(0), double(0), theta);
       tf::quaternionTFToMsg(q, odom_out.pose.pose.orientation);
-      odom_out.twist.covariance[CovElem::lin_ang::angZ_angZ] = 0;
 
       break;
     }
-
-
-    // broadcast tf message
-    if(broadcast_tf)
-    {
-      geometry_msgs::TransformStamped tf_msg;
-      tf::Transform trafo;
-      tf_msg.header.stamp            = msg->header.stamp;
-      tf_msg.child_frame_id          = msg->header.frame_id;
-      tf_msg.header.frame_id         = odom_out.header.frame_id;
-      tf_msg.transform.translation.x = odom_out.pose.pose.position.x;
-      tf_msg.transform.translation.y = odom_out.pose.pose.position.y;
-      tf_msg.transform.translation.z = odom_out.pose.pose.position.z;
-      tf_msg.transform.rotation.x    = odom_out.pose.pose.orientation.x;
-      tf_msg.transform.rotation.y    = odom_out.pose.pose.orientation.y;
-      tf_msg.transform.rotation.z    = odom_out.pose.pose.orientation.z;
-      tf_msg.transform.rotation.w    = odom_out.pose.pose.orientation.w;
-      br->sendTransform(tf_msg);
-
-    }
-
 
     // unknown number of encoder
     default:
@@ -153,8 +197,27 @@ void encoderCallback(const drive_ros_msgs::VehicleEncoder::ConstPtr& msg)
     }
 
   }
+
   // send out odom
   odom.publish(odom_out);
+
+  // broadcast tf message
+  if(broadcast_tf)
+  {
+    geometry_msgs::TransformStamped tf_msg;
+    tf::Transform trafo;
+    tf_msg.header.stamp            = out_time;
+    tf_msg.child_frame_id          = msg->header.frame_id;
+    tf_msg.header.frame_id         = odom_out.header.frame_id;
+    tf_msg.transform.translation.x = odom_out.pose.pose.position.x;
+    tf_msg.transform.translation.y = odom_out.pose.pose.position.y;
+    tf_msg.transform.translation.z = odom_out.pose.pose.position.z;
+    tf_msg.transform.rotation.x    = odom_out.pose.pose.orientation.x;
+    tf_msg.transform.rotation.y    = odom_out.pose.pose.orientation.y;
+    tf_msg.transform.rotation.z    = odom_out.pose.pose.orientation.z;
+    tf_msg.transform.rotation.w    = odom_out.pose.pose.orientation.w;
+    br->sendTransform(tf_msg);
+  }
 
 }
 
@@ -174,8 +237,14 @@ int main(int argc, char **argv)
   odom_out.header.frame_id = pnh.param<std::string>("static_frame_id", "odom");
   ROS_INFO_STREAM("Loaded static_frame: " << odom_out.header.frame_id);
 
-  broadcast_tf = pnh.param<bool>("broadcast_tf", "true");
+  broadcast_tf = pnh.param<bool>("broadcast_tf", true);
   ROS_INFO_STREAM("Loaded broadcast_tf: " << broadcast_tf);
+
+  int theta_filter_length = pnh.param<int>("theta_filter_length", 10);
+  ROS_INFO_STREAM("Loaded theta_filter_length: " << theta_filter_length);
+
+  // initialize filter
+  theta_filter = new MovingAverage(theta_filter_length);
 
   // set all not used odom covariances to -1
   for(int i=0; i<36; i++)
@@ -190,6 +259,9 @@ int main(int argc, char **argv)
     ROS_ERROR("We need at least one encoder, to work properly!");
     return 1;
   }
+
+  // initial covariances are zero (TODO: make parameter)
+  Sigma_p.setZero();
 
   // setup subscriber and publisher
   if(broadcast_tf)
