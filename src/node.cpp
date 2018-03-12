@@ -73,9 +73,7 @@ void encoderCallback(const drive_ros_msgs::VehicleEncoder::ConstPtr& msg)
   odom_out.child_frame_id = msg->header.frame_id;
 
 
-  // caculate velocity
   double delta_s(0), vel(0), vel_var(0);
-
 
   // calculate mean
   for(int i=0; i<encoder_ct; i++){
@@ -135,8 +133,8 @@ void encoderCallback(const drive_ros_msgs::VehicleEncoder::ConstPtr& msg)
   Jacobian_delta(X, DELTA_L) = costh/2 + (delta_s * sinth)/(2 * track_width);
   Jacobian_delta(Y, DELTA_R) = sinth/2 + (delta_s * costh)/(2 * track_width);
   Jacobian_delta(Y, DELTA_L) = sinth/2 - (delta_s * costh)/(2 * track_width);
-  Jacobian_delta(THETA, DELTA_R) = 1/track_width;
-  Jacobian_delta(THETA, DELTA_L) = 1/track_width;
+  Jacobian_delta(THETA, DELTA_R) =  1/track_width;
+  Jacobian_delta(THETA, DELTA_L) = -1/track_width;
 
   Eigen::Matrix<double, 2, 2> Sigma_delta;
   Sigma_delta.setZero();
