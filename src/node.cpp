@@ -74,7 +74,7 @@ void encoderCallback(const drive_ros_msgs::VehicleEncoder::ConstPtr& msg)
 
 
   // caculate velocity
-  double delta_s(0);
+  double delta_s(0), vel(0), vel_var(0);
 
 
   // calculate mean
@@ -82,12 +82,16 @@ void encoderCallback(const drive_ros_msgs::VehicleEncoder::ConstPtr& msg)
 
     // use absolute position to avoid errors from message drops
     delta_s += msg->encoder[i].pos_abs - msg_old.encoder[i].pos_abs;
+    vel     += msg->encoder[i].vel;
+    vel_var += msg->encoder[i].vel_var;
 
     // save old message
     msg_old.encoder[i].pos_abs = msg->encoder[i].pos_abs;
   }
 
   delta_s = delta_s/(double)encoder_ct;
+  vel     =     vel/(double)encoder_ct;
+  vel_var = vel_var/(double)encoder_ct;
 
 
   double dtheta_f = ( msg->encoder[msg->FRONT_WHEEL_RIGHT].pos_rel -
@@ -109,6 +113,8 @@ void encoderCallback(const drive_ros_msgs::VehicleEncoder::ConstPtr& msg)
   // save position and velocity in odom_out
   odom_out.pose.pose.position.x += delta_s * costh;
   odom_out.pose.pose.position.y += delta_s * sinth;
+  odom_out.twist.twist.linear.x = vel * costh;
+  odom_out.twist.twist.linear.y = vel * sinth;
 
   // integrate theta
   theta += dtheta;
@@ -160,6 +166,11 @@ void encoderCallback(const drive_ros_msgs::VehicleEncoder::ConstPtr& msg)
   odom_out.pose.covariance[CovElem::lin_ang::angZ_linX] = Sigma_p(THETA, X    );
   odom_out.pose.covariance[CovElem::lin_ang::angZ_linY] = Sigma_p(THETA, Y    );
   odom_out.pose.covariance[CovElem::lin_ang::angZ_angZ] = Sigma_p(THETA, THETA);
+
+
+  // todo: could this be better handled?
+  odom_out.twist.covariance[CovElem::lin_ang::linX_linX] = vel_var * costh;
+  odom_out.twist.covariance[CovElem::lin_ang::linY_linY] = vel_var * sinth;
 
   // send out odom
   odom.publish(odom_out);
