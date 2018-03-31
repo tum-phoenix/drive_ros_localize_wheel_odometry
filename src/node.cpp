@@ -19,7 +19,8 @@ static constexpr size_t DELTA_L = 1;
 
 const int encoder_ct = 4;                // number of encoder (assume we have 4 wheel encoder)
 double theta = 0;                        // heading
-double track_width;                      // distance between wheels on an axis
+double track_width;                      // actual distance between wheels on an axis
+double err_rl;                           // error factor between left and right
 bool broadcast_tf;                       // whether to broadcast tf
 bool first_msg = true;                   // is first message ?
 bool use_sensor_time_for_pub = true;     // use sensor time or not
@@ -92,11 +93,11 @@ void encoderCallback(const drive_ros_msgs::VehicleEncoder::ConstPtr& msg)
   vel_var = vel_var/(double)encoder_ct;
 
 
-  double dtheta_f = ( msg->encoder[msg->FRONT_WHEEL_RIGHT].pos_rel -
-                      msg->encoder[msg->FRONT_WHEEL_LEFT].pos_rel ) / track_width;
+  double dtheta_f = ( msg->encoder[msg->FRONT_WHEEL_RIGHT].pos_rel * err_rl -
+                      msg->encoder[msg->FRONT_WHEEL_LEFT].pos_rel  / err_rl ) / track_width ;
 
-  double dtheta_r = ( msg->encoder[msg->REAR_WHEEL_RIGHT].pos_rel -
-                      msg->encoder[msg->REAR_WHEEL_LEFT].pos_rel ) / track_width;
+  double dtheta_r = ( msg->encoder[msg->REAR_WHEEL_RIGHT].pos_rel * err_rl -
+                      msg->encoder[msg->REAR_WHEEL_LEFT].pos_rel  / err_rl)  / track_width;
 
 
   // use mean of front and rear delta theta
@@ -201,6 +202,9 @@ int main(int argc, char **argv)
   // get parameters
   track_width = pnh.param<double>("track_width", 0.22);
   ROS_INFO_STREAM("Loaded track_width: " << track_width);
+
+  err_rl = pnh.param<double>("err_rl", 1);
+  ROS_INFO_STREAM("Loaded err_rl: " << err_rl);
 
   odom_out.header.frame_id = pnh.param<std::string>("static_frame_id", "odom");
   ROS_INFO_STREAM("Loaded static_frame: " << odom_out.header.frame_id);
