@@ -4,6 +4,7 @@
 #include "tf/tf.h"
 #include "tf/transform_broadcaster.h"
 #include "eigen3/Eigen/Dense"
+#include "std_srvs/Trigger.h"
 
 #include "drive_ros_localize_wheel_odometry/cov_elements.h"
 #include "drive_ros_localize_wheel_odometry/moving_average.h"
@@ -25,8 +26,10 @@ bool broadcast_tf;                       // whether to broadcast tf
 bool first_msg = true;                   // is first message ?
 bool use_sensor_time_for_pub = true;     // use sensor time or not
 bool use_static_cov = true;              // use static covariances or not
+std::string static_frame_id;             // static frame id
 
-ros::Publisher odom;                     // publisher
+ros::ServiceServer reset_svr;            // reset service
+ros::Publisher odom_pub;                 // publisher
 nav_msgs::Odometry odom_out;             // published message
 tf::TransformBroadcaster* br;            // broadcast transform
 
@@ -34,10 +37,49 @@ drive_ros_msgs::VehicleEncoder msg_old;  // old vehicle encoder message
 Eigen::Matrix<double, 3, 3> Sigma_p;     // covariance matrix of previous step
 MovingAverage* theta_filter;             // moving average filter for theta
 
-
+std::vector<float> initial_cov;          // initial covariances
 std::vector<double> static_cov;          // static covariances
 
 
+// reset
+void reset()
+{
+  ROS_INFO_STREAM("Reset Wheel Odometry.");
+
+  // new odometry should be zero
+  odom_out = nav_msgs::Odometry();
+
+  theta = 0;
+  theta_filter->clear();
+
+  first_msg = true;
+
+  // set all not used odom covariances to -1
+  for(int i=0; i<36; i++)
+  {
+    odom_out.twist.covariance[i] = -1;
+    odom_out.pose.covariance[i] = -1;
+  }
+
+  // set initial covariances
+  for(int i=0; i<9; i++)
+  {
+    Sigma_p(i/3, i%3) = initial_cov.at(i);
+  }
+  ROS_INFO_STREAM("Set Sigma_P: " << std::endl << Sigma_p);
+}
+
+// services to reset odometry
+bool svrResetOdom(std_srvs::Trigger::Request  &req,
+                  std_srvs::Trigger::Response &res)
+{
+
+  reset();
+  res.message = "Reset wheel odometry.";
+  return res.success = true;
+}
+
+// encoder callback
 void encoderCallback(const drive_ros_msgs::VehicleEncoder::ConstPtr& msg)
 {
 
@@ -61,7 +103,6 @@ void encoderCallback(const drive_ros_msgs::VehicleEncoder::ConstPtr& msg)
   }
 
 
-
   // set header
   ros::Time out_time;
   if(use_sensor_time_for_pub){
@@ -69,7 +110,7 @@ void encoderCallback(const drive_ros_msgs::VehicleEncoder::ConstPtr& msg)
   }else{
     out_time = ros::Time::now();
   }
-
+  odom_out.header.frame_id = static_frame_id;
   odom_out.header.stamp = out_time;
   odom_out.child_frame_id = msg->header.frame_id;
 
@@ -172,7 +213,7 @@ void encoderCallback(const drive_ros_msgs::VehicleEncoder::ConstPtr& msg)
   odom_out.twist.covariance[CovElem::lin_ang::linY_linY] = vel_var * sinth;
 
   // send out odom
-  odom.publish(odom_out);
+  odom_pub.publish(odom_out);
 
   // broadcast tf message
   if(broadcast_tf)
@@ -206,8 +247,8 @@ int main(int argc, char **argv)
   err_rl = pnh.param<double>("err_rl", 1);
   ROS_INFO_STREAM("Loaded err_rl: " << err_rl);
 
-  odom_out.header.frame_id = pnh.param<std::string>("static_frame_id", "odom");
-  ROS_INFO_STREAM("Loaded static_frame: " << odom_out.header.frame_id);
+  static_frame_id = pnh.param<std::string>("static_frame_id", "odom");
+  ROS_INFO_STREAM("Loaded static_frame: " << static_frame_id);
 
   broadcast_tf = pnh.param<bool>("broadcast_tf", true);
   ROS_INFO_STREAM("Loaded broadcast_tf: " << broadcast_tf);
@@ -216,13 +257,7 @@ int main(int argc, char **argv)
   ROS_INFO_STREAM("Loaded theta_filter_length: " << theta_filter_length);
 
   // initial covariances
-  std::vector<float> initial_cov;
   pnh.getParam("initial_cov", initial_cov);
-  for(int i=0; i<9; i++)
-  {
-    Sigma_p(i/3, i%3) = initial_cov.at(i);
-  }
-  ROS_INFO_STREAM("Loaded initial_cov: " << std::endl << Sigma_p);
 
   // static covariances
   use_static_cov = pnh.param<bool>("use_static_cov", true);
@@ -237,19 +272,16 @@ int main(int argc, char **argv)
   // initialize filter
   theta_filter = new MovingAverage(theta_filter_length);
 
-  // set all not used odom covariances to -1
-  for(int i=0; i<36; i++)
-  {
-    odom_out.twist.covariance[i] = -1;
-    odom_out.pose.covariance[i] = -1;
-  }
+  // reset everything
+  reset();
 
   // setup subscriber and publisher
   if(broadcast_tf)
   {
     br = new tf::TransformBroadcaster;
   }
-  odom = pnh.advertise<nav_msgs::Odometry>("odom_out", 100);
+  reset_svr = pnh.advertiseService("reset_odom", svrResetOdom);
+  odom_pub = pnh.advertise<nav_msgs::Odometry>("odom_out", 100);
   ros::Subscriber sub = pnh.subscribe("enc_in", 100, encoderCallback);
 
   ros::spin();
