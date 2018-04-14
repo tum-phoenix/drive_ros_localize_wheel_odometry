@@ -42,7 +42,7 @@
 
 
     <node name="localize_wheel_odometry" pkg="drive_ros_localize_wheel_odometry"
-          type="node" output="$(arg output)" launch-prefix="$(arg nice)">
+          type="drive_ros_localize_wheel_odometry_node" output="$(arg output)" launch-prefix="$(arg nice)">
         <remap from="~/enc_in" to="$(arg input_topic)"/>
         <remap from="~/odom_out" to="$(arg output_topic)"/>
         <param name="static_frame_id" type="str" value="$(arg static_frame_id)" />
