@@ -5,6 +5,9 @@
 #include "tf/transform_broadcaster.h"
 #include "eigen3/Eigen/Dense"
 #include "std_srvs/Trigger.h"
+#include <rosbag/bag.h>
+#include <rosbag/view.h>
+#include <boost/foreach.hpp>
 
 #include "drive_ros_localize_wheel_odometry/cov_elements.h"
 #include "drive_ros_localize_wheel_odometry/moving_average.h"
@@ -21,20 +24,19 @@ static constexpr size_t DELTA_L = 1;
 const int encoder_ct = 4;                // number of encoder (assume we have 4 wheel encoder)
 double theta = 0;                        // heading
 double track_width;                      // actual distance between wheels on an axis
-double err_rl;                           // error factor between left and right
+double err_d;                            // error factor between left and right
 double err_s;                            // scaling error of wheels
 bool broadcast_tf;                       // whether to broadcast tf
-bool first_msg = true;                   // is first message ?
 bool use_sensor_time_for_pub = true;     // use sensor time or not
 bool use_static_cov = true;              // use static covariances or not
 std::string static_frame_id;             // static frame id
+std::string input_topic;                 // input topic name
 
 ros::ServiceServer reset_svr;            // reset service
 ros::Publisher odom_pub;                 // publisher
 nav_msgs::Odometry odom_out;             // published message
 tf::TransformBroadcaster* br;            // broadcast transform
 
-drive_ros_msgs::VehicleEncoder msg_old;  // old vehicle encoder message
 Eigen::Matrix<double, 3, 3> Sigma_p;     // covariance matrix of previous step
 MovingAverage* theta_filter;             // moving average filter for theta
 
@@ -52,8 +54,6 @@ void reset()
 
   theta = 0;
   theta_filter->clear();
-
-  first_msg = true;
 
   // set all not used odom covariances to -1
   for(int i=0; i<36; i++)
@@ -80,29 +80,29 @@ bool svrResetOdom(std_srvs::Trigger::Request  &req,
   return res.success = true;
 }
 
+
 // encoder callback
 void encoderCallback(const drive_ros_msgs::VehicleEncoder::ConstPtr& msg)
 {
 
-  // check if first message
-  if(first_msg)
-  {
-    first_msg = false;
+  // take average of front and rear and correct with calibrated errors
+  drive_ros_msgs::EncoderLinear left;
+  double left_corr = err_s * 2/(err_d + 1);
+  left.pos_rel = ( msg->encoder[msg->FRONT_WHEEL_LEFT].pos_rel
+                 + msg->encoder[msg->REAR_WHEEL_LEFT].pos_rel ) * left_corr / 2.0;
+  left.pos_abs = ( msg->encoder[msg->FRONT_WHEEL_LEFT].pos_abs
+                 + msg->encoder[msg->REAR_WHEEL_LEFT].pos_abs)  * left_corr / 2.0;
+  left.vel =     ( msg->encoder[msg->FRONT_WHEEL_LEFT].vel
+                 + msg->encoder[msg->REAR_WHEEL_LEFT].vel)      * left_corr / 2.0;
 
-    // set old encoder message
-    for(int i=0; i<encoder_ct; i++)
-    {
-      msg_old.encoder[i].pos_abs     = msg->encoder[i].pos_abs;
-      msg_old.encoder[i].pos_abs_var = msg->encoder[i].pos_abs_var;
-      msg_old.encoder[i].pos_rel     = msg->encoder[i].pos_rel;
-      msg_old.encoder[i].pos_rel_var = msg->encoder[i].pos_rel_var;
-    }
-
-    // return
-    ROS_INFO("Got first message.");
-    return;
-  }
-
+  drive_ros_msgs::EncoderLinear right;
+  double right_corr = err_s * 2/(1/err_d + 1);
+  right.pos_rel = ( msg->encoder[msg->FRONT_WHEEL_RIGHT].pos_rel
+                  + msg->encoder[msg->REAR_WHEEL_RIGHT].pos_rel ) * right_corr / 2.0;
+  right.pos_abs = ( msg->encoder[msg->FRONT_WHEEL_RIGHT].pos_abs
+                  + msg->encoder[msg->REAR_WHEEL_RIGHT].pos_abs)  * right_corr / 2.0;
+  right.vel =     ( msg->encoder[msg->FRONT_WHEEL_RIGHT].vel
+                  + msg->encoder[msg->REAR_WHEEL_RIGHT].vel)      * right_corr / 2.0;
 
   // set header
   ros::Time out_time;
@@ -115,36 +115,10 @@ void encoderCallback(const drive_ros_msgs::VehicleEncoder::ConstPtr& msg)
   odom_out.header.stamp = out_time;
   odom_out.child_frame_id = msg->header.frame_id;
 
-
-  double delta_s(0), vel(0), vel_var(0);
-
   // calculate mean
-  for(int i=0; i<encoder_ct; i++){
-
-    // use absolute position to avoid errors from message drops
-    delta_s += msg->encoder[i].pos_abs - msg_old.encoder[i].pos_abs;
-    vel     += msg->encoder[i].vel;
-    vel_var += msg->encoder[i].vel_var;
-
-    // save old message
-    msg_old.encoder[i].pos_abs = msg->encoder[i].pos_abs;
-  }
-
-  delta_s = err_s * delta_s/(double)encoder_ct;
-  vel     = err_s *     vel/(double)encoder_ct;
-  vel_var = err_s * vel_var/(double)encoder_ct;
-
-
-  double dtheta_f = err_s * ( msg->encoder[msg->FRONT_WHEEL_RIGHT].pos_rel * err_rl -
-                              msg->encoder[msg->FRONT_WHEEL_LEFT].pos_rel  / err_rl ) / track_width ;
-
-  double dtheta_r = err_s * ( msg->encoder[msg->REAR_WHEEL_RIGHT].pos_rel * err_rl -
-                              msg->encoder[msg->REAR_WHEEL_LEFT].pos_rel  / err_rl)  / track_width;
-
-
-  // use mean of front and rear delta theta
-  theta_filter->add((dtheta_f + dtheta_r) / 2.0);
-  double dtheta = theta_filter->getCurrentAverage();
+  double delta_s = (right.pos_rel + left.pos_rel) / 2.0;
+  double vel     = (right.vel     + left.vel    ) / 2.0;
+  double dtheta  = (right.pos_rel - left.pos_rel) / track_width; // track width error already included
 
   // some intermediate variables
   double th = theta + dtheta/2;
@@ -209,9 +183,9 @@ void encoderCallback(const drive_ros_msgs::VehicleEncoder::ConstPtr& msg)
   odom_out.pose.covariance[CovElem::lin_ang::angZ_angZ] = Sigma_p(THETA, THETA);
 
 
-  // todo: could this be better handled?
-  odom_out.twist.covariance[CovElem::lin_ang::linX_linX] = vel_var * costh;
-  odom_out.twist.covariance[CovElem::lin_ang::linY_linY] = vel_var * sinth;
+  // TODO: could this be better handled?
+  odom_out.twist.covariance[CovElem::lin_ang::linX_linX] = 0; // TODO
+  odom_out.twist.covariance[CovElem::lin_ang::linY_linY] = 0;
 
   // send out odom
   odom_pub.publish(odom_out);
@@ -235,6 +209,40 @@ void encoderCallback(const drive_ros_msgs::VehicleEncoder::ConstPtr& msg)
   }
 }
 
+// read data from bag and feed it into the callback function
+bool readFromBag(std::string bag_file_path)
+{
+  // open bag
+  rosbag::Bag bag;
+  bag.open(bag_file_path, rosbag::bagmode::Read);
+
+  // topics to load
+  std::vector<std::string> bag_topics;
+  bag_topics.push_back(input_topic);
+
+  // create bag view
+  rosbag::View bag_view(bag, rosbag::TopicQuery(bag_topics));
+
+  // loop over all messages
+  BOOST_FOREACH(rosbag::MessageInstance const m, bag_view)
+  {
+
+    // odometer msg
+    if(m.getTopic() == input_topic || ("/" + m.getTopic() == input_topic))
+    {
+      drive_ros_msgs::VehicleEncoder::ConstPtr enc = m.instantiate<drive_ros_msgs::VehicleEncoder>();
+      if (enc != NULL){
+        encoderCallback(enc);
+      }
+    }
+
+  }
+
+  // close bag
+  bag.close();
+  return true;
+}
+
 int main(int argc, char **argv)
 {
   ros::init(argc, argv, "localize_wheel_odometry");
@@ -245,14 +253,17 @@ int main(int argc, char **argv)
   track_width = pnh.param<double>("track_width", 0.22);
   ROS_INFO_STREAM("Loaded track_width: " << track_width);
 
-  err_rl = pnh.param<double>("err_rl", 1);
-  ROS_INFO_STREAM("Loaded err_rl: " << err_rl);
+  err_d = pnh.param<double>("err_d", 1);
+  ROS_INFO_STREAM("Loaded err_d: " << err_d);
 
   err_s = pnh.param<double>("err_s", 1);
   ROS_INFO_STREAM("Loaded err_s: " << err_s);
 
-  static_frame_id = pnh.param<std::string>("static_frame_id", "odom");
+  static_frame_id = pnh.param<std::string>("static_frame_id", "");
   ROS_INFO_STREAM("Loaded static_frame: " << static_frame_id);
+
+  input_topic = pnh.param<std::string>("input_topic", "");
+  ROS_INFO_STREAM("Loaded input_topic: " << input_topic);
 
   broadcast_tf = pnh.param<bool>("broadcast_tf", true);
   ROS_INFO_STREAM("Loaded broadcast_tf: " << broadcast_tf);
@@ -260,7 +271,12 @@ int main(int argc, char **argv)
   int theta_filter_length = pnh.param<int>("theta_filter_length", 10);
   ROS_INFO_STREAM("Loaded theta_filter_length: " << theta_filter_length);
 
-  // initial covariances
+  bool use_bag = pnh.param<bool>("use_bag", false);
+  ROS_INFO_STREAM("Loaded use_bag: " << use_bag);
+
+  std::string bag_file = pnh.param<std::string>("bag_file", "");
+  ROS_INFO_STREAM("Loaded bag_file: " << bag_file);
+
   pnh.getParam("initial_cov", initial_cov);
 
   // static covariances
@@ -286,13 +302,22 @@ int main(int argc, char **argv)
   }
   reset_svr = pnh.advertiseService("reset_odom", svrResetOdom);
   odom_pub = pnh.advertise<nav_msgs::Odometry>("odom_out", 100);
-  ros::Subscriber sub = pnh.subscribe("enc_in", 100, encoderCallback);
 
-  ros::spin();
+  // check if read from bag
+  if(use_bag){
 
-  // clean up
-  delete br;
-  delete theta_filter;
+    // read data directly from a bag
+    readFromBag(bag_file);
+    ROS_INFO_STREAM("Finished Reading from Bag");
+
+  }else{
+
+    ros::Subscriber sub = pnh.subscribe(input_topic, 100, encoderCallback);
+    // spin node normally
+    while(ros::ok()){
+      ros::spin();
+    }
+  }
 
   return 0;
 }

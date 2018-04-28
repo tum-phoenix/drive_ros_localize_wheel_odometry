@@ -1,17 +1,16 @@
 # actual track width = approximately the distance between wheels on an axis
 # * can be different from nomianal track width
 # * change this value if vehicle is driving curves to narrow or to wide
-track_width: 0.22
+track_width: 0.21
 
 # scaling factor between nominal and actual wheel diameter
 # * perfect wheels (no error): 1
 err_s: 0.978
 
 # error factor between right and left
-# * err_rl = right / left
 # * perfect wheels (no error): 1
 # * this could be for example due to slighly differences in wheel diameters
-err_rl: 1.0
+err_d: 1.0
 
 # initial covariances [x, y, theta]
 initial_cov: [0, 0, 0,

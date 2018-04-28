@@ -50,6 +50,7 @@
   <!--   <doc_depend>doxygen</doc_depend> -->
   <buildtool_depend>catkin</buildtool_depend>
   <build_depend>drive_ros_msgs</build_depend>
+  <build_depend>rosbag</build_depend>
   <build_depend>nav_msgs</build_depend>
   <build_depend>tf</build_depend>
   <build_depend>tf2</build_depend>
@@ -58,11 +59,13 @@
   <build_export_depend>nav_msgs</build_export_depend>
   <build_export_depend>tf</build_export_depend>
   <build_export_depend>tf2</build_export_depend>
+  <build_export_depend>rosbag</build_export_depend>
   <exec_depend>drive_ros_msgs</exec_depend>
   <exec_depend>nav_msgs</exec_depend>
   <exec_depend>tf</exec_depend>
   <exec_depend>tf2</exec_depend>
   <exec_depend>std_srvs</exec_depend>
+  <exec_depend>rosbag</exec_depend>
 
 
   <!-- The export tag contains other, unspecified, tags -->

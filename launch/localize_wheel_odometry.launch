@@ -1,16 +1,16 @@
 <launch>
 
     <!-- vehicle name e.g. cc2017_car -->
-    <arg name="vehicle" default="cc2017_car"/>
+    <arg name="vehicle" default="ftm_rc_car_1"/>
 
     <!-- input topic name -->
-    <arg name="input_topic" default="/from_mav/odometer_delta"/>
+    <arg name="input_topic" default="/wheel_encoder/raw"/>
 
     <!-- output topic name -->
-    <arg name="output_topic" default="/from_mav/wheel_odom"/>
+    <arg name="output_topic" default="/wheel_encoder/odom"/>
 
     <!-- static frame id (moving frame id will be used from incoming message frame) -->
-    <arg name="static_frame_id" default="odometry" />
+    <arg name="static_frame_id" default="odom" />
 
     <!-- addionallty to the odom message, also broadcast tf? -->
     <arg name="broadcast_tf" default="true" />
@@ -28,7 +28,7 @@
             * high: less noise, worse dynamics
             * low: high noise, better dynamics
     -->
-    <arg name="theta_filter_length" default="100" />
+    <arg name="theta_filter_length" default="10" />
 
     <!-- vehicle configuration file -->
     <arg name="vehicle_config" default="$(find drive_ros_localize_wheel_odometry)/config/$(arg vehicle).yaml" />
@@ -41,14 +41,21 @@
     <arg name="output" default="screen"/>
 
 
+    <!-- debugging options -->
+    <arg name="use_bag" default="false" />
+    <arg name="bag_file" default="/path/to/file.bag" />
+
+
     <node name="localize_wheel_odometry" pkg="drive_ros_localize_wheel_odometry"
           type="drive_ros_localize_wheel_odometry_node" output="$(arg output)" launch-prefix="$(arg nice)">
-        <remap from="~/enc_in" to="$(arg input_topic)"/>
         <remap from="~/odom_out" to="$(arg output_topic)"/>
+        <param name="input_topic" type="str" value="$(arg input_topic)"/>
         <param name="static_frame_id" type="str" value="$(arg static_frame_id)" />
         <param name="broadcast_tf" type="boolean" value="$(arg broadcast_tf)" />
         <param name="use_sensor_time_for_pub" type="boolean" value="$(arg use_sensor_time_for_pub)" />
         <param name="theta_filter_length" type="int" value="$(arg theta_filter_length)" />
+        <param name="use_bag" type="boolean" value="$(arg use_bag)" />
+        <param name="bag_file" type="str" value="$(arg bag_file)" />
         <rosparam command="load" file="$(arg vehicle_config)"/>
     </node>
 

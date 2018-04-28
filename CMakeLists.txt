@@ -13,6 +13,7 @@ find_package(catkin REQUIRED COMPONENTS
   tf
   tf2
   std_srvs
+  rosbag
 )
 
 ## System dependencies are found with CMake's conventions
