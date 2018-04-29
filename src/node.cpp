@@ -11,6 +11,7 @@
 
 #include "drive_ros_localize_wheel_odometry/cov_elements.h"
 #include "drive_ros_localize_wheel_odometry/moving_average.h"
+#include "drive_ros_localize_wheel_odometry/save_odom_in_csv.h"
 
 // matrix indices
 static constexpr size_t X     = 0;
@@ -23,7 +24,7 @@ static constexpr size_t DELTA_L = 1;
 
 const int encoder_ct = 4;                // number of encoder (assume we have 4 wheel encoder)
 double theta = 0;                        // heading
-double track_width;                      // actual distance between wheels on an axis
+double b_actual;                         // actual distance between wheels on an axis (effective wheel base)
 double err_d;                            // error factor between left and right
 double err_s;                            // scaling error of wheels
 bool broadcast_tf;                       // whether to broadcast tf
@@ -31,6 +32,8 @@ bool use_sensor_time_for_pub = true;     // use sensor time or not
 bool use_static_cov = true;              // use static covariances or not
 std::string static_frame_id;             // static frame id
 std::string input_topic;                 // input topic name
+std::ofstream file_out_log;              // file output handle
+bool use_bag;                            // debug mode
 
 ros::ServiceServer reset_svr;            // reset service
 ros::Publisher odom_pub;                 // publisher
@@ -118,7 +121,7 @@ void encoderCallback(const drive_ros_msgs::VehicleEncoder::ConstPtr& msg)
   // calculate mean
   double delta_s = (right.pos_rel + left.pos_rel) / 2.0;
   double vel     = (right.vel     + left.vel    ) / 2.0;
-  double dtheta  = (right.pos_rel - left.pos_rel) / track_width; // track width error already included
+  double dtheta  = (right.pos_rel - left.pos_rel) / b_actual; // track width error already included
 
   // some intermediate variables
   double th = theta + dtheta/2;
@@ -146,12 +149,12 @@ void encoderCallback(const drive_ros_msgs::VehicleEncoder::ConstPtr& msg)
   Jacobian_p(Y, THETA) =   delta_s * costh;
 
   Eigen::Matrix<double, 3, 2> Jacobian_delta;
-  Jacobian_delta(X, DELTA_R) = costh/2 - (delta_s * sinth)/(2 * track_width);
-  Jacobian_delta(X, DELTA_L) = costh/2 + (delta_s * sinth)/(2 * track_width);
-  Jacobian_delta(Y, DELTA_R) = sinth/2 + (delta_s * costh)/(2 * track_width);
-  Jacobian_delta(Y, DELTA_L) = sinth/2 - (delta_s * costh)/(2 * track_width);
-  Jacobian_delta(THETA, DELTA_R) =  1/track_width;
-  Jacobian_delta(THETA, DELTA_L) = -1/track_width;
+  Jacobian_delta(X, DELTA_R) = costh/2 - (delta_s * sinth)/(2 * b_actual);
+  Jacobian_delta(X, DELTA_L) = costh/2 + (delta_s * sinth)/(2 * b_actual);
+  Jacobian_delta(Y, DELTA_R) = sinth/2 + (delta_s * costh)/(2 * b_actual);
+  Jacobian_delta(Y, DELTA_L) = sinth/2 - (delta_s * costh)/(2 * b_actual);
+  Jacobian_delta(THETA, DELTA_R) =  1/b_actual;
+  Jacobian_delta(THETA, DELTA_L) = -1/b_actual;
 
   Eigen::Matrix<double, 2, 2> Sigma_delta;
   Sigma_delta.setZero();
@@ -207,6 +210,11 @@ void encoderCallback(const drive_ros_msgs::VehicleEncoder::ConstPtr& msg)
     tf_msg.transform.rotation.w    = odom_out.pose.pose.orientation.w;
     br->sendTransform(tf_msg);
   }
+
+  // save message to debug file
+  if(use_bag){
+    SaveOdomInCSV::writeMsg(odom_out, file_out_log);
+  }
 }
 
 // read data from bag and feed it into the callback function
@@ -226,8 +234,6 @@ bool readFromBag(std::string bag_file_path)
   // loop over all messages
   BOOST_FOREACH(rosbag::MessageInstance const m, bag_view)
   {
-
-    // odometer msg
     if(m.getTopic() == input_topic || ("/" + m.getTopic() == input_topic))
     {
       drive_ros_msgs::VehicleEncoder::ConstPtr enc = m.instantiate<drive_ros_msgs::VehicleEncoder>();
@@ -235,7 +241,6 @@ bool readFromBag(std::string bag_file_path)
         encoderCallback(enc);
       }
     }
-
   }
 
   // close bag
@@ -250,8 +255,8 @@ int main(int argc, char **argv)
   ros::NodeHandle pnh("~");
 
   // get parameters
-  track_width = pnh.param<double>("track_width", 0.22);
-  ROS_INFO_STREAM("Loaded track_width: " << track_width);
+  b_actual = pnh.param<double>("b_actual", 0.22);
+  ROS_INFO_STREAM("Loaded b_actual: " << b_actual);
 
   err_d = pnh.param<double>("err_d", 1);
   ROS_INFO_STREAM("Loaded err_d: " << err_d);
@@ -271,7 +276,7 @@ int main(int argc, char **argv)
   int theta_filter_length = pnh.param<int>("theta_filter_length", 10);
   ROS_INFO_STREAM("Loaded theta_filter_length: " << theta_filter_length);
 
-  bool use_bag = pnh.param<bool>("use_bag", false);
+  use_bag = pnh.param<bool>("use_bag", false);
   ROS_INFO_STREAM("Loaded use_bag: " << use_bag);
 
   std::string bag_file = pnh.param<std::string>("bag_file", "");
@@ -306,9 +311,12 @@ int main(int argc, char **argv)
   // check if read from bag
   if(use_bag){
 
+    SaveOdomInCSV::writeHeader(bag_file + "_out.csv", file_out_log);
+
     // read data directly from a bag
     readFromBag(bag_file);
     ROS_INFO_STREAM("Finished Reading from Bag");
+
 
   }else{
 
@@ -319,5 +327,8 @@ int main(int argc, char **argv)
     }
   }
 
+  ROS_INFO_STREAM("Exit Node");
+  pnh.shutdown();
+  nh.shutdown();
   return 0;
 }

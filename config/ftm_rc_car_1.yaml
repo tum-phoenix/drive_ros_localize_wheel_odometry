@@ -1,22 +1,24 @@
-# actual track width = approximately the distance between wheels on an axis
-# * can be different from nomianal track width
-# * change this value if vehicle is driving curves to narrow or to wide
-track_width: 0.21
+# actual track width = effective wheel base
+# approximately the distance between wheels on an axis
+# * can be different from nominal track width
+b_actual: 0.20747221684370348
 
 # scaling factor between nominal and actual wheel diameter
 # * perfect wheels (no error): 1
 err_s: 0.978
 
 # error factor between right and left
+# this could be for example due to slighly differences in wheel diameters
 # * perfect wheels (no error): 1
-# * this could be for example due to slighly differences in wheel diameters
-err_d: 1.0
+err_d: 1.000103226023903
 
 # initial covariances [x, y, theta]
 initial_cov: [0, 0, 0,
               0, 0, 0,
               0, 0, 0]
 
+
+# TODO: remove this
 # should the filter use static covariances instead of incoming message covariances
 use_static_cov: true
 
