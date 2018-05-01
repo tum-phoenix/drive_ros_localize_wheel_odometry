@@ -24,9 +24,10 @@ static constexpr size_t DELTA_L = 1;
 
 const int encoder_ct = 4;                // number of encoder (assume we have 4 wheel encoder)
 double theta = 0;                        // heading
-double b_actual;                         // actual distance between wheels on an axis (effective wheel base)
+double b_actual;                         // actual distance between wheels on an axis (effective track width)
 double err_d;                            // error factor between left and right
 double err_s;                            // scaling error of wheels
+bool use_front;
 bool broadcast_tf;                       // whether to broadcast tf
 bool use_sensor_time_for_pub = true;     // use sensor time or not
 bool use_static_cov = true;              // use static covariances or not
@@ -88,24 +89,27 @@ bool svrResetOdom(std_srvs::Trigger::Request  &req,
 void encoderCallback(const drive_ros_msgs::VehicleEncoder::ConstPtr& msg)
 {
 
-  // take average of front and rear and correct with calibrated errors
+  // choose front or rear
+  uint8_t wheel_left, wheel_right;
+  if(use_front){
+    wheel_left = msg->FRONT_WHEEL_LEFT;
+    wheel_right = msg->FRONT_WHEEL_RIGHT;
+  }else{
+    wheel_left = msg->REAR_WHEEL_LEFT;
+    wheel_right = msg->REAR_WHEEL_RIGHT;
+  }
+
   drive_ros_msgs::EncoderLinear left;
   double left_corr = err_s * 2/(err_d + 1);
-  left.pos_rel = ( msg->encoder[msg->FRONT_WHEEL_LEFT].pos_rel
-                 + msg->encoder[msg->REAR_WHEEL_LEFT].pos_rel ) * left_corr / 2.0;
-  left.pos_abs = ( msg->encoder[msg->FRONT_WHEEL_LEFT].pos_abs
-                 + msg->encoder[msg->REAR_WHEEL_LEFT].pos_abs)  * left_corr / 2.0;
-  left.vel =     ( msg->encoder[msg->FRONT_WHEEL_LEFT].vel
-                 + msg->encoder[msg->REAR_WHEEL_LEFT].vel)      * left_corr / 2.0;
+  left.pos_rel =  msg->encoder[wheel_left].pos_rel * left_corr;
+  left.pos_abs =  msg->encoder[wheel_left].pos_abs * left_corr;
+  left.vel =      msg->encoder[wheel_left].vel * left_corr;
 
   drive_ros_msgs::EncoderLinear right;
   double right_corr = err_s * 2/(1/err_d + 1);
-  right.pos_rel = ( msg->encoder[msg->FRONT_WHEEL_RIGHT].pos_rel
-                  + msg->encoder[msg->REAR_WHEEL_RIGHT].pos_rel ) * right_corr / 2.0;
-  right.pos_abs = ( msg->encoder[msg->FRONT_WHEEL_RIGHT].pos_abs
-                  + msg->encoder[msg->REAR_WHEEL_RIGHT].pos_abs)  * right_corr / 2.0;
-  right.vel =     ( msg->encoder[msg->FRONT_WHEEL_RIGHT].vel
-                  + msg->encoder[msg->REAR_WHEEL_RIGHT].vel)      * right_corr / 2.0;
+  right.pos_rel =  msg->encoder[wheel_right].pos_rel * right_corr;
+  right.pos_abs =  msg->encoder[wheel_right].pos_abs * right_corr;
+  right.vel =      msg->encoder[wheel_right].vel * right_corr;
 
   // set header
   ros::Time out_time;
@@ -263,6 +267,9 @@ int main(int argc, char **argv)
 
   err_s = pnh.param<double>("err_s", 1);
   ROS_INFO_STREAM("Loaded err_s: " << err_s);
+
+  use_front = pnh.param<bool>("use_front", true);
+  ROS_INFO_STREAM("Loaded use_front: " << use_front);
 
   static_frame_id = pnh.param<std::string>("static_frame_id", "");
   ROS_INFO_STREAM("Loaded static_frame: " << static_frame_id);

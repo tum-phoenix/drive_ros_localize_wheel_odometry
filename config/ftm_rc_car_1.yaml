@@ -11,6 +11,9 @@ err_s: 0.978
 # this could be for example due to slighly differences in wheel diameters
 # * perfect wheels (no error): 1
 err_d: 1.000103226023903
+# whether to use front vehicle encoders
+# if false then rear encoders are being used
+use_front: true
 
 # initial covariances [x, y, theta]
 initial_cov: [0, 0, 0,
