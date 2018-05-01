@@ -289,6 +289,9 @@ int main(int argc, char **argv)
   std::string bag_file = pnh.param<std::string>("bag_file", "");
   ROS_INFO_STREAM("Loaded bag_file: " << bag_file);
 
+  std::string csv_out = pnh.param<std::string>("csv_out", "");
+  ROS_INFO_STREAM("Loaded csv_out: " << csv_out);
+
   pnh.getParam("initial_cov", initial_cov);
 
   // static covariances
@@ -318,7 +321,7 @@ int main(int argc, char **argv)
   // check if read from bag
   if(use_bag){
 
-    SaveOdomInCSV::writeHeader(bag_file + "_out.csv", file_out_log);
+    SaveOdomInCSV::writeHeader(csv_out, file_out_log);
 
     // read data directly from a bag
     readFromBag(bag_file);

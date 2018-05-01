@@ -44,6 +44,7 @@
     <!-- debugging options -->
     <arg name="use_bag" default="false" />
     <arg name="bag_file" default="/path/to/file.bag" />
+    <arg name="csv_out" default="/path/to/out.csv" />
 
 
     <node name="localize_wheel_odometry" pkg="drive_ros_localize_wheel_odometry"
@@ -56,6 +57,7 @@
         <param name="theta_filter_length" type="int" value="$(arg theta_filter_length)" />
         <param name="use_bag" type="boolean" value="$(arg use_bag)" />
         <param name="bag_file" type="str" value="$(arg bag_file)" />
+        <param name="csv_out" type="str" value="$(arg csv_out)" />
         <rosparam command="load" file="$(arg vehicle_config)"/>
     </node>
 
