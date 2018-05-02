@@ -1,16 +1,24 @@
-# actual track width = effective wheel base
-# approximately the distance between wheels on an axis
-# * can be different from nominal track width
-b_actual: 0.20747221684370348
-
 # scaling factor between nominal and actual wheel diameter
 # * perfect wheels (no error): 1
 err_s: 0.978
 
+# actual track width = effective track width
+# approximately the distance between wheels on an axis
+# * can be different from nominal track width
+#b_actual: 0.20 # no calibration
+#b_actual: 0.2148464769197494 # calibration using hyperopt -> small tracks only
+#b_actual: 0.2066359987028736 # calibration using umbmark -> small tracks only
+b_actual: 0.21772407072534242  # calibration using hyperopt -> big tracks only (best paramaters so far)
+
 # error factor between right and left
 # this could be for example due to slighly differences in wheel diameters
 # * perfect wheels (no error): 1
-err_d: 1.000103226023903
+#err_d: 1.0 # no calibration
+#err_d: 0.9970764198696417 # calibration using hyperopt -> small tracks only
+#err_d: 0.9984535177026052 # calibration using umbmark -> small tracks only
+err_d: 0.9974844436989763 # calibration using hyperopt -> big tracks only (best paramaters so far)
+
+
 # whether to use front vehicle encoders
 # if false then rear encoders are being used
 use_front: true
