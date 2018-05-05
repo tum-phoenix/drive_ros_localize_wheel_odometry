@@ -31,7 +31,7 @@ def objective(params):
     path_ros_package = path_catkin_ws + "/src/drive_ros_config/modules/drive_ros_localize_wheel_odometry"
     path_config_file = path_ros_package + "/config/ftm_rc_car_1.yaml"
     path_trial_runner = path_ros_package + "/scripts/hyperopt/runTrial.sh"
-    path_bag_folder = "/data/Backup/Bags/FabianMA/odom_cali2"
+    path_bag_folder = "/data/Backup/Bags/FabianMA/odom_cali"
     path_launch_file = path_ros_package + "/launch/localize_wheel_odometry.launch"
     path_results = "/data/KalmanTuningLogs/"
 

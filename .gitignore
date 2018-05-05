@@ -1,3 +1,5 @@
 *.csv
 *.json
+*.svg
 .ipynb_checkpoints
+

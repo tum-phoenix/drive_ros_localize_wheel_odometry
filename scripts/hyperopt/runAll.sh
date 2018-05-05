@@ -4,7 +4,7 @@
 DBHOST="localhost"
 DBPORT="1234"
 DBDIR="/home/fabian/mongodb/"
-EVALS_MAX="5000"
+EVALS_MAX="15000"
 WORKER_MAX=15
 
 # get current date and time as experiment name
