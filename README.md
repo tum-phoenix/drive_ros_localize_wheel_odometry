@@ -5,6 +5,7 @@ It assumes that the vehicle has 4 wheel encoder. Heading will be calculated from
 
 Parameters can be calibrated using the "UMBmark" calibration technique: *UMBmark — A Method for Measuring, Comparing, and Correcting Dead-reckoning Errors in Mobile Robots* by J. Borenstein and L. Feng.
 
+Another way of calibration is using [Hyperopt](https://github.com/hyperopt/hyperopt). 
 
 Authors:
 * fabolhak
