@@ -28,10 +28,3 @@ initial_cov: [0, 0, 0,
               0, 0, 0,
               0, 0, 0]
 
-
-# TODO: remove this
-# should the filter use static covariances instead of incoming message covariances
-use_static_cov: true
-
-# if we use static covariances [var_right, var_left]
-static_cov: [0.00000001, 0.00000001]

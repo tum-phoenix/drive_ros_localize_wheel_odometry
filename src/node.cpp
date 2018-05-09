@@ -30,7 +30,6 @@ double err_s;                            // scaling error of wheels
 bool use_front;
 bool broadcast_tf;                       // whether to broadcast tf
 bool use_sensor_time_for_pub = true;     // use sensor time or not
-bool use_static_cov = true;              // use static covariances or not
 std::string static_frame_id;             // static frame id
 std::string input_topic;                 // input topic name
 std::ofstream file_out_log;              // file output handle
@@ -45,7 +44,6 @@ Eigen::Matrix<double, 3, 3> Sigma_p;     // covariance matrix of previous step
 MovingAverage* theta_filter;             // moving average filter for theta
 
 std::vector<float> initial_cov;          // initial covariances
-std::vector<double> static_cov;          // static covariances
 
 
 // reset
@@ -99,17 +97,24 @@ void encoderCallback(const drive_ros_msgs::VehicleEncoder::ConstPtr& msg)
     wheel_right = msg->REAR_WHEEL_RIGHT;
   }
 
+  // correct messages from error
   drive_ros_msgs::EncoderLinear left;
   double left_corr = err_s * 2/(err_d + 1);
-  left.pos_rel =  msg->encoder[wheel_left].pos_rel * left_corr;
-  left.pos_abs =  msg->encoder[wheel_left].pos_abs * left_corr;
-  left.vel =      msg->encoder[wheel_left].vel * left_corr;
+  left.pos_rel      = msg->encoder[wheel_left].pos_rel      * left_corr;
+  left.pos_rel_var  = msg->encoder[wheel_left].pos_rel_var  * left_corr;
+  left.pos_abs      = msg->encoder[wheel_left].pos_abs      * left_corr;
+  left.pos_abs_var  = msg->encoder[wheel_left].pos_abs_var  * left_corr;
+  left.vel          = msg->encoder[wheel_left].vel          * left_corr;
+  left.vel_var      = msg->encoder[wheel_left].vel_var      * left_corr;
 
   drive_ros_msgs::EncoderLinear right;
   double right_corr = err_s * 2/(1/err_d + 1);
-  right.pos_rel =  msg->encoder[wheel_right].pos_rel * right_corr;
-  right.pos_abs =  msg->encoder[wheel_right].pos_abs * right_corr;
-  right.vel =      msg->encoder[wheel_right].vel * right_corr;
+  right.pos_rel     = msg->encoder[wheel_right].pos_rel     * right_corr;
+  right.pos_rel_var = msg->encoder[wheel_right].pos_rel_var * right_corr;
+  right.pos_abs     = msg->encoder[wheel_right].pos_abs     * right_corr;
+  right.pos_abs_var = msg->encoder[wheel_right].pos_abs_var * right_corr;
+  right.vel         = msg->encoder[wheel_right].vel         * right_corr;
+  right.vel_var     = msg->encoder[wheel_right].vel_var     * right_corr;
 
   // set header
   ros::Time out_time;
@@ -163,16 +168,9 @@ void encoderCallback(const drive_ros_msgs::VehicleEncoder::ConstPtr& msg)
   Eigen::Matrix<double, 2, 2> Sigma_delta;
   Sigma_delta.setZero();
 
-  if(use_static_cov)
-  {
-    Sigma_delta(DELTA_R, DELTA_R) = static_cov.at(DELTA_R);
-    Sigma_delta(DELTA_L, DELTA_L) = static_cov.at(DELTA_L);
-  }else{
-    Sigma_delta(DELTA_R, DELTA_R) = ( msg->encoder[msg->FRONT_WHEEL_RIGHT].pos_abs_var +
-                                      msg->encoder[msg->REAR_WHEEL_RIGHT].pos_abs_var )/2;
-    Sigma_delta(DELTA_L, DELTA_L) = ( msg->encoder[msg->FRONT_WHEEL_LEFT].pos_abs_var +
-                                      msg->encoder[msg->REAR_WHEEL_LEFT].pos_abs_var )/2;
-  }
+
+  Sigma_delta(DELTA_R, DELTA_R) = right.pos_rel_var;
+  Sigma_delta(DELTA_L, DELTA_L) = left.pos_rel_var;
 
 
   Sigma_p = Jacobian_p     * Sigma_p     * Jacobian_p.transpose()       // covariances from previous state
@@ -191,7 +189,7 @@ void encoderCallback(const drive_ros_msgs::VehicleEncoder::ConstPtr& msg)
 
 
   // TODO: could this be better handled?
-  odom_out.twist.covariance[CovElem::lin_ang::linX_linX] = 0; // TODO
+  odom_out.twist.covariance[CovElem::lin_ang::linX_linX] = 0;
   odom_out.twist.covariance[CovElem::lin_ang::linY_linY] = 0;
 
   // send out odom
@@ -293,16 +291,6 @@ int main(int argc, char **argv)
   ROS_INFO_STREAM("Loaded csv_out: " << csv_out);
 
   pnh.getParam("initial_cov", initial_cov);
-
-  // static covariances
-  use_static_cov = pnh.param<bool>("use_static_cov", true);
-  ROS_INFO_STREAM("Loaded use_static_cov: " << use_static_cov);
-  if(use_static_cov)
-  {
-    pnh.getParam("static_cov", static_cov);
-    ROS_INFO_STREAM("Loaded static_cov: [" << static_cov.at(DELTA_R) << ", "
-                                           << static_cov.at(DELTA_L) << "]");
-  }
 
   // initialize filter
   theta_filter = new MovingAverage(theta_filter_length);
