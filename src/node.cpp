@@ -27,10 +27,11 @@ double theta = 0;                        // heading
 double b_actual;                         // actual distance between wheels on an axis (effective track width)
 double err_d;                            // error factor between left and right
 double err_s;                            // scaling error of wheels
-bool use_front;
+bool use_front;                          // whether to use front or rear axis encoder
 bool broadcast_tf;                       // whether to broadcast tf
-bool use_sensor_time_for_pub = true;     // use sensor time or not
+bool use_sensor_time = true;             // use sensor time or not
 std::string static_frame_id;             // static frame id
+std::string axis_frame;                  // axis being used
 std::string input_topic;                 // input topic name
 std::ofstream file_out_log;              // file output handle
 bool use_bag;                            // debug mode
@@ -88,14 +89,9 @@ void encoderCallback(const drive_ros_msgs::VehicleEncoder::ConstPtr& msg)
 {
 
   // choose front or rear
-  uint8_t wheel_left, wheel_right;
-  if(use_front){
-    wheel_left = msg->FRONT_WHEEL_LEFT;
-    wheel_right = msg->FRONT_WHEEL_RIGHT;
-  }else{
-    wheel_left = msg->REAR_WHEEL_LEFT;
-    wheel_right = msg->REAR_WHEEL_RIGHT;
-  }
+  uint8_t wheel_left = (use_front) ? msg->FRONT_WHEEL_LEFT : msg->REAR_WHEEL_LEFT;
+  uint8_t wheel_right = (use_front) ? msg->FRONT_WHEEL_RIGHT : msg->REAR_WHEEL_RIGHT;
+
 
   // correct messages from error
   drive_ros_msgs::EncoderLinear left;
@@ -117,20 +113,15 @@ void encoderCallback(const drive_ros_msgs::VehicleEncoder::ConstPtr& msg)
   right.vel_var     = msg->encoder[wheel_right].vel_var     * right_corr;
 
   // set header
-  ros::Time out_time;
-  if(use_sensor_time_for_pub){
-    out_time = msg->header.stamp;
-  }else{
-    out_time = ros::Time::now();
-  }
   odom_out.header.frame_id = static_frame_id;
-  odom_out.header.stamp = out_time;
-  odom_out.child_frame_id = msg->header.frame_id;
+  odom_out.header.stamp = (use_sensor_time) ? msg->header.stamp : ros::Time::now();
+  odom_out.child_frame_id = axis_frame;
 
   // calculate mean
   double delta_s = (right.pos_rel + left.pos_rel) / 2.0;
   double vel     = (right.vel     + left.vel    ) / 2.0;
   double dtheta  = (right.pos_rel - left.pos_rel) / b_actual; // track width error already included
+  dtheta = theta_filter->addAndGetCrrtAvg(dtheta); // filter theta value
 
   // some intermediate variables
   double th = theta + dtheta/2;
@@ -198,10 +189,11 @@ void encoderCallback(const drive_ros_msgs::VehicleEncoder::ConstPtr& msg)
   // broadcast tf message
   if(broadcast_tf)
   {
+    // tf to static frame
     geometry_msgs::TransformStamped tf_msg;
     tf::Transform trafo;
-    tf_msg.header.stamp            = out_time;
-    tf_msg.child_frame_id          = msg->header.frame_id;
+    tf_msg.header.stamp            = (use_sensor_time) ? msg->header.stamp : ros::Time::now();
+    tf_msg.child_frame_id          = axis_frame;
     tf_msg.header.frame_id         = odom_out.header.frame_id;
     tf_msg.transform.translation.x = odom_out.pose.pose.position.x;
     tf_msg.transform.translation.y = odom_out.pose.pose.position.y;
@@ -280,6 +272,9 @@ int main(int argc, char **argv)
 
   int theta_filter_length = pnh.param<int>("theta_filter_length", 10);
   ROS_INFO_STREAM("Loaded theta_filter_length: " << theta_filter_length);
+
+  axis_frame = pnh.param<std::string>("axis_frame", "");
+  ROS_INFO_STREAM("Loaded axis_frame: " << axis_frame);
 
   use_bag = pnh.param<bool>("use_bag", false);
   ROS_INFO_STREAM("Loaded use_bag: " << use_bag);

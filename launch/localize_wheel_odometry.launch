@@ -9,7 +9,7 @@
     <!-- output topic name -->
     <arg name="output_topic" default="/wheel_encoder/odom"/>
 
-    <!-- static frame id (moving frame id will be used from incoming message frame) -->
+    <!-- static frame id (moving frame id will be the axis frame) -->
     <arg name="static_frame_id" default="odom" />
 
     <!-- addionallty to the odom message, also broadcast tf? -->
@@ -28,10 +28,21 @@
             * high: less noise, worse dynamics
             * low: high noise, better dynamics
     -->
-    <arg name="theta_filter_length" default="10" />
+    <arg name="theta_filter_length" default="15" />
 
     <!-- vehicle configuration file -->
     <arg name="vehicle_config" default="$(find drive_ros_localize_wheel_odometry)/config/$(arg vehicle).yaml" />
+
+    <!-- whether to use front vehicle encoders (if false then rear encoders are being used) -->
+    <arg name="use_front" default="true"/>
+
+    <!--
+        frame of the axis where encoders are being used
+        * if use_front == true: front axis frame
+        * if use_front == false: rear axis frame
+        will be used as child frame id
+    -->
+    <arg name="axis_frame" default="front_axis_middle_ground" />
 
     <!-- define nice value of process (lower means higher priority) [-20;19] -->
     <!-- more infos: https://en.wikipedia.org/wiki/Nice_(Unix) -->
@@ -55,6 +66,8 @@
         <param name="broadcast_tf" type="boolean" value="$(arg broadcast_tf)" />
         <param name="use_sensor_time_for_pub" type="boolean" value="$(arg use_sensor_time_for_pub)" />
         <param name="theta_filter_length" type="int" value="$(arg theta_filter_length)" />
+        <param name="use_front" type="boolean" value="$(arg use_front)"/>
+        <param name="axis_frame" type="str" value="$(arg axis_frame)"/>
         <param name="use_bag" type="boolean" value="$(arg use_bag)" />
         <param name="bag_file" type="str" value="$(arg bag_file)" />
         <param name="csv_out" type="str" value="$(arg csv_out)" />

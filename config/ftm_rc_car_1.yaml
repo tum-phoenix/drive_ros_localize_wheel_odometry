@@ -18,11 +18,6 @@ b_actual: 0.21772407072534242  # calibration using hyperopt -> big tracks only (
 #err_d: 0.9984535177026052 # calibration using umbmark -> small tracks only
 err_d: 0.9974844436989763 # calibration using hyperopt -> big tracks only (best paramaters so far)
 
-
-# whether to use front vehicle encoders
-# if false then rear encoders are being used
-use_front: true
-
 # initial covariances [x, y, theta]
 initial_cov: [0, 0, 0,
               0, 0, 0,
