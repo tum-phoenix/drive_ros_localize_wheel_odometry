@@ -96,21 +96,21 @@ void encoderCallback(const drive_ros_msgs::VehicleEncoder::ConstPtr& msg)
   // correct messages from error
   drive_ros_msgs::EncoderLinear left;
   double left_corr = err_s * 2/(err_d + 1);
-  left.pos_rel      = msg->encoder[wheel_left].pos_rel      * left_corr;
-  left.pos_rel_var  = msg->encoder[wheel_left].pos_rel_var  * left_corr;
-  left.pos_abs      = msg->encoder[wheel_left].pos_abs      * left_corr;
-  left.pos_abs_var  = msg->encoder[wheel_left].pos_abs_var  * left_corr;
-  left.vel          = msg->encoder[wheel_left].vel          * left_corr;
-  left.vel_var      = msg->encoder[wheel_left].vel_var      * left_corr;
+  left.pos_rel      = msg->encoder[wheel_left].pos_rel      *     left_corr;
+  left.pos_rel_var  = msg->encoder[wheel_left].pos_rel_var  * pow(left_corr, 2);
+  left.pos_abs      = msg->encoder[wheel_left].pos_abs      *     left_corr;
+  left.pos_abs_var  = msg->encoder[wheel_left].pos_abs_var  * pow(left_corr, 2);
+  left.vel          = msg->encoder[wheel_left].vel          *     left_corr;
+  left.vel_var      = msg->encoder[wheel_left].vel_var      * pow(left_corr, 2);
 
   drive_ros_msgs::EncoderLinear right;
   double right_corr = err_s * 2/(1/err_d + 1);
-  right.pos_rel     = msg->encoder[wheel_right].pos_rel     * right_corr;
-  right.pos_rel_var = msg->encoder[wheel_right].pos_rel_var * right_corr;
-  right.pos_abs     = msg->encoder[wheel_right].pos_abs     * right_corr;
-  right.pos_abs_var = msg->encoder[wheel_right].pos_abs_var * right_corr;
-  right.vel         = msg->encoder[wheel_right].vel         * right_corr;
-  right.vel_var     = msg->encoder[wheel_right].vel_var     * right_corr;
+  right.pos_rel     = msg->encoder[wheel_right].pos_rel     *     right_corr;    ;
+  right.pos_rel_var = msg->encoder[wheel_right].pos_rel_var * pow(right_corr, 2);;
+  right.pos_abs     = msg->encoder[wheel_right].pos_abs     *     right_corr;    ;
+  right.pos_abs_var = msg->encoder[wheel_right].pos_abs_var * pow(right_corr, 2);;
+  right.vel         = msg->encoder[wheel_right].vel         *     right_corr;    ;
+  right.vel_var     = msg->encoder[wheel_right].vel_var     * pow(right_corr, 2);;
 
   // set header
   odom_out.header.frame_id = static_frame_id;
