@@ -22,6 +22,13 @@ static constexpr size_t DELTA_R = 0;
 static constexpr size_t DELTA_L = 1;
 
 
+static constexpr size_t VEL_X = 0;
+static constexpr size_t VEL_Y = 0;
+
+static constexpr size_t VEL_R = 0;
+static constexpr size_t VEL_L = 1;
+
+
 const int encoder_ct = 4;                // number of encoder (assume we have 4 wheel encoder)
 double theta = 0;                        // heading
 double b_actual;                         // actual distance between wheels on an axis (effective track width)
@@ -128,11 +135,9 @@ void encoderCallback(const drive_ros_msgs::VehicleEncoder::ConstPtr& msg)
   double costh = cos(static_cast<float>(th));
   double sinth = sin(static_cast<float>(th));
 
-  // save position and velocity in odom_out
+  // save position in odom_out
   odom_out.pose.pose.position.x += delta_s * costh;
   odom_out.pose.pose.position.y += delta_s * sinth;
-  odom_out.twist.twist.linear.x = vel * costh;
-  odom_out.twist.twist.linear.y = vel * sinth;
 
   // integrate theta
   theta += dtheta;
@@ -163,7 +168,7 @@ void encoderCallback(const drive_ros_msgs::VehicleEncoder::ConstPtr& msg)
   Sigma_delta(DELTA_R, DELTA_R) = right.pos_rel_var;
   Sigma_delta(DELTA_L, DELTA_L) = left.pos_rel_var;
 
-
+  // error propagation law
   Sigma_p = Jacobian_p     * Sigma_p     * Jacobian_p.transpose()       // covariances from previous state
           + Jacobian_delta * Sigma_delta * Jacobian_delta.transpose();  // covariances from new delta
 
@@ -179,9 +184,30 @@ void encoderCallback(const drive_ros_msgs::VehicleEncoder::ConstPtr& msg)
   odom_out.pose.covariance[CovElem::lin_ang::angZ_angZ] = Sigma_p(THETA, THETA);
 
 
-  // TODO: could this be better handled?
-  odom_out.twist.covariance[CovElem::lin_ang::linX_linX] = 0;
-  odom_out.twist.covariance[CovElem::lin_ang::linY_linY] = 0;
+  // velocity is simply projected in driving direction
+  odom_out.twist.twist.linear.x = vel * costh;
+  odom_out.twist.twist.linear.y = vel * sinth;
+
+  // compute Jacobian and covariances
+  Eigen::Matrix<double, 2, 2> Jacobian_vel;
+  Jacobian_vel.setZero();
+  Jacobian_vel(VEL_X, VEL_R) = costh / 2.0;
+  Jacobian_vel(VEL_X, VEL_L) = costh / 2.0;
+  Jacobian_vel(VEL_Y, VEL_R) = sinth / 2.0;
+  Jacobian_vel(VEL_Y, VEL_L) = sinth / 2.0;
+
+  Eigen::Matrix<double, 2, 2> Sigma_vel;
+  Sigma_vel.setZero();
+  Sigma_vel(VEL_R, VEL_R) = right.vel_var;
+  Sigma_vel(VEL_L, VEL_L) = left.vel_var;
+
+  Eigen::Matrix<double, 2, 2> Sigma_v;
+  Sigma_v = Jacobian_vel * Sigma_vel * Jacobian_vel.transpose();
+
+  odom_out.twist.covariance[CovElem::lin_ang::linX_linX] = Sigma_v(VEL_X, VEL_X);
+  odom_out.twist.covariance[CovElem::lin_ang::linX_linY] = Sigma_v(VEL_X, VEL_Y);
+  odom_out.twist.covariance[CovElem::lin_ang::linY_linX] = Sigma_v(VEL_Y, VEL_X);
+  odom_out.twist.covariance[CovElem::lin_ang::linY_linY] = Sigma_v(VEL_Y, VEL_Y);
 
   // send out odom
   odom_pub.publish(odom_out);
