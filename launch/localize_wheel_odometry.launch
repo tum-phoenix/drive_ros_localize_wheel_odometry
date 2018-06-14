@@ -23,12 +23,12 @@
     <arg name="use_sensor_time_for_pub" default="false" />
 
     <!--
-        moving average filter for theta calculation.
+        moving average filter.
         Length of moving average:
             * high: less noise, worse dynamics
             * low: high noise, better dynamics
     -->
-    <arg name="theta_filter_length" default="15" />
+    <arg name="filter_length" default="150" />
 
     <!-- vehicle configuration file -->
     <arg name="vehicle_config" default="$(find drive_ros_localize_wheel_odometry)/config/$(arg vehicle).yaml" />
@@ -65,7 +65,7 @@
         <param name="static_frame_id" type="str" value="$(arg static_frame_id)" />
         <param name="broadcast_tf" type="boolean" value="$(arg broadcast_tf)" />
         <param name="use_sensor_time_for_pub" type="boolean" value="$(arg use_sensor_time_for_pub)" />
-        <param name="theta_filter_length" type="int" value="$(arg theta_filter_length)" />
+        <param name="filter_length" type="int" value="$(arg filter_length)" />
         <param name="use_front" type="boolean" value="$(arg use_front)"/>
         <param name="axis_frame" type="str" value="$(arg axis_frame)"/>
         <param name="use_bag" type="boolean" value="$(arg use_bag)" />
