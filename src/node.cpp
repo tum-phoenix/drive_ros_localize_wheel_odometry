@@ -50,6 +50,8 @@ tf::TransformBroadcaster* br;            // broadcast transform
 
 Eigen::Matrix<double, 3, 3> Sigma_p;     // covariance matrix of previous step
 MovingAverage* theta_filter;             // moving average filter for theta
+MovingAverage* delta_s_filter;           // moving average filter for delta_s
+MovingAverage* v_filter;                 // moving average filter for v
 
 std::vector<float> initial_cov;          // initial covariances
 
@@ -64,6 +66,8 @@ void reset()
 
   theta = 0;
   theta_filter->clear();
+  delta_s_filter->clear();
+  v_filter->clear();
 
   // set all not used odom covariances to -1
   for(int i=0; i<36; i++)
@@ -128,7 +132,11 @@ void encoderCallback(const drive_ros_msgs::VehicleEncoder::ConstPtr& msg)
   double delta_s = (right.pos_rel + left.pos_rel) / 2.0;
   double vel     = (right.vel     + left.vel    ) / 2.0;
   double dtheta  = (right.pos_rel - left.pos_rel) / b_actual; // track width error already included
-  dtheta = theta_filter->addAndGetCrrtAvg(dtheta); // filter theta value
+
+  delta_s = delta_s_filter->addAndGetCrrtAvg(delta_s);
+  dtheta  = theta_filter->addAndGetCrrtAvg(dtheta);
+  vel     = v_filter->addAndGetCrrtAvg(vel);
+
 
   // some intermediate variables
   double th = theta + dtheta/2;
@@ -296,8 +304,8 @@ int main(int argc, char **argv)
   broadcast_tf = pnh.param<bool>("broadcast_tf", true);
   ROS_INFO_STREAM("Loaded broadcast_tf: " << broadcast_tf);
 
-  int theta_filter_length = pnh.param<int>("theta_filter_length", 10);
-  ROS_INFO_STREAM("Loaded theta_filter_length: " << theta_filter_length);
+  int filter_length = pnh.param<int>("filter_length", 10);
+  ROS_INFO_STREAM("Loaded theta_filter_length: " << filter_length);
 
   axis_frame = pnh.param<std::string>("axis_frame", "");
   ROS_INFO_STREAM("Loaded axis_frame: " << axis_frame);
@@ -314,7 +322,9 @@ int main(int argc, char **argv)
   pnh.getParam("initial_cov", initial_cov);
 
   // initialize filter
-  theta_filter = new MovingAverage(theta_filter_length);
+  theta_filter   = new MovingAverage(filter_length);
+  delta_s_filter = new MovingAverage(filter_length);
+  v_filter = new MovingAverage(filter_length);
 
   // reset everything
   reset();
