@@ -7,5 +7,10 @@ Parameters can be calibrated using the "UMBmark" calibration technique: *UMBmark
 
 Another way of calibration is using [Hyperopt](https://github.com/hyperopt/hyperopt). 
 
+[Additional documentation](https://mediatum.ub.tum.de/node?id=1452203) of
+* Calibration (chapter 4.1.1)
+* Odometry Calculation (chapter 4.2.1)
+
+
 Authors:
 * fabolhak
